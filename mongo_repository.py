@@ -98,18 +98,10 @@ def normalize_vehicle(document: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
-def _vehicle_query(query: dict[str, Any] | None = None, public_only: bool = False, search: str | None = None) -> dict[str, Any]:
+def _vehicle_query(query: dict[str, Any] | None = None, public_only: bool = False) -> dict[str, Any]:
 	criteria: dict[str, Any] = dict(query or {})
 	if public_only:
 		criteria["stato_attuale"] = {"$ne": "In Preparazione"}
-	if search:
-		criteria["$or"] = [
-			{"marca": {"$regex": search, "$options": "i"}},
-			{"modello": {"$regex": search, "$options": "i"}},
-			{"vin_telaio": {"$regex": search, "$options": "i"}},
-			{"venditore": {"$regex": search, "$options": "i"}},
-			{"assegnato_a_cliente.nome": {"$regex": search, "$options": "i"}},
-		]
 	return criteria
 
 
@@ -118,9 +110,8 @@ def list_vehicles(
 	public_only: bool = False,
 	limit: int | None = None,
 	exclude_id: str | None = None,
-	search: str | None = None,
 ) -> list[dict[str, Any]]:
-	criteria = _vehicle_query(query=query, public_only=public_only, search=search)
+	criteria = _vehicle_query(query=query, public_only=public_only)
 	if exclude_id:
 		criteria["_id"] = {"$ne": ObjectId(exclude_id)}
 	documents = list(
@@ -174,37 +165,31 @@ def delete_vehicle_document(vehicle_id: str) -> bool:
 
 
 def dashboard_summary() -> dict[str, int]:
+	# Raggruppa i veicoli per stato e conta quanti ce ne sono in ciascuno.
+	# Stesso schema visto a lezione: $group con _id su un campo + accumulatore $sum.
 	pipeline = [
-		{
-			"$group": {
-				"_id": None,
-				"total": {"$sum": 1},
-				"ready": {
-					"$sum": {
-						"$cond": [{"$in": ["$stato_attuale", ["Pronta per la consegna", "Arrivato in Concessionaria"]]}, 1, 0]
-					}
-				},
-				"in_transit": {"$sum": {"$cond": [{"$eq": ["$stato_attuale", "In Viaggio"]}, 1, 0]}},
-				"in_preparation": {"$sum": {"$cond": [{"$eq": ["$stato_attuale", "In Preparazione"]}, 1, 0]}},
-			},
-		},
+		{"$group": {"_id": "$stato_attuale", "count": {"$sum": 1}}},
 	]
-	result = next(get_collection().aggregate(pipeline), None) or {}
+	counts = {row["_id"]: row["count"] for row in get_collection().aggregate(pipeline)}
+
 	return {
-		"total": result.get("total", 0),
-		"ready": result.get("ready", 0),
-		"in_transit": result.get("in_transit", 0),
-		"in_preparation": result.get("in_preparation", 0),
+		"total": sum(counts.values()),
+		"ready": counts.get("Pronta per la consegna", 0) + counts.get("Arrivato in Concessionaria", 0),
+		"in_transit": counts.get("In Viaggio", 0),
+		"in_preparation": counts.get("In Preparazione", 0),
 	}
 
 
 def featured_vehicles(limit: int = 3) -> list[dict[str, Any]]:
-	pipeline = [
-		{"$addFields": {"last_event_date": {"$arrayElemAt": ["$logistica_timeline.data", -1]}}},
-		{"$sort": {"last_event_date": DESCENDING, "marca": ASCENDING, "modello": ASCENDING}},
-		{"$limit": limit},
-	]
-	return [normalize_vehicle(document) for document in get_collection().aggregate(pipeline)]
+	# Le auto con l'evento di timeline piu' recente: recupero tutti i veicoli con
+	# find() e li ordino in Python sulla data dell'ultimo evento (gia' calcolata
+	# in normalize_vehicle), tenendo solo i primi.
+	vehicles = list_vehicles()
+	vehicles.sort(
+		key=lambda vehicle: vehicle["arrival_date_raw"] or datetime.min,
+		reverse=True,
+	)
+	return vehicles[:limit]
 
 
 def build_filter_options(vehicles: list[dict[str, Any]]) -> dict[str, list[str]]:
