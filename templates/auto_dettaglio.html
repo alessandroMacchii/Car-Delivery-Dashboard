@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="page-header page-header--compact">
+  <div>
+    <span class="eyebrow">{{ 'Nuova auto' if is_new else 'Scheda auto' }}</span>
+    <h1>{{ car.brand }} {{ car.modello }}</h1>
+    <p>Dettaglio completo della singola vettura, con dati tecnici, cliente e timeline operativa.</p>
+  </div>
+  <div class="page-header__meta">
+    <div class="meta-pill"><span>{{ car.status or 'Bozza' }}</span> stato</div>
+    <div class="meta-pill"><span>{{ car.arrival_date }}</span> ultimo evento</div>
+  </div>
+</section>
+
+<section class="detail-layout">
+  <article class="detail-card detail-card--highlight">
+    <form method="post" class="vehicle-form">
+      <div class="vehicle-form__grid">
+        <section class="form-card">
+          <span class="eyebrow">Anagrafica veicolo</span>
+          <div class="form-grid">
+            <label>Marca<input type="text" name="marca" value="{{ vehicle_form.marca }}" required></label>
+            <label>Modello<input type="text" name="modello" value="{{ vehicle_form.modello }}" required></label>
+            <label>VIN telaio<input type="text" name="vin_telaio" value="{{ vehicle_form.vin_telaio }}" required></label>
+            <label>Stato attuale<input type="text" name="stato_attuale" value="{{ vehicle_form.stato_attuale }}" required></label>
+            <label>Venditore<input type="text" name="venditore" value="{{ vehicle_form.venditore }}"></label>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <span class="eyebrow">Cliente</span>
+          <div class="form-grid">
+            <label>ID cliente<input type="text" name="id_cliente" value="{{ vehicle_form.id_cliente }}"></label>
+            <label>Nome cliente<input type="text" name="nome_cliente" value="{{ vehicle_form.nome_cliente }}"></label>
+            <label>Email cliente<input type="email" name="email_cliente" value="{{ vehicle_form.email_cliente }}"></label>
+            <label>Telefono cliente<input type="text" name="telefono_cliente" value="{{ vehicle_form.telefono_cliente }}"></label>
+          </div>
+        </section>
+
+        <section class="form-card">
+          <span class="eyebrow">Configurazione</span>
+          <div class="form-grid">
+            <label>Allestimento<input type="text" name="allestimento" value="{{ vehicle_form.allestimento }}"></label>
+            <label>Motorizzazione<input type="text" name="motorizzazione" value="{{ vehicle_form.motorizzazione }}"></label>
+            <label>Colore esterno<input type="text" name="colore_esterno" value="{{ vehicle_form.colore_esterno }}"></label>
+            <label>Batteria kWh<input type="number" step="1" name="capacita_batteria_kw" value="{{ vehicle_form.capacita_batteria_kw }}"></label>
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" name="cavo_ricarica_incluso" {% if vehicle_form.cavo_ricarica_incluso %}checked{% endif %}>
+            Cavo di ricarica incluso
+          </label>
+          <label>Pacchetti inclusi<textarea name="pacchetti_inclusi" rows="4">{{ vehicle_form.pacchetti_inclusi }}</textarea></label>
+          <label>Pacchetti aggiuntivi<textarea name="pacchetti_aggiuntivi" rows="4">{{ vehicle_form.pacchetti_aggiuntivi }}</textarea></label>
+        </section>
+
+        <section class="form-card">
+          <span class="eyebrow">Timeline stato</span>
+          <div class="form-grid">
+            <label>Nuovo stato timeline<input type="text" name="timeline_stato" placeholder="Es. In preparazione"></label>
+            <label>Data evento<input type="date" name="timeline_data"></label>
+            <label>Operatore<input type="text" name="timeline_operatore" value="{{ vehicle_form.timeline_operatore }}"></label>
+          </div>
+          <p class="form-note">Se compili questa sezione, il nuovo evento verrà aggiunto alla timeline.</p>
+        </section>
+      </div>
+
+      <div class="detail-actions detail-actions--stack">
+        <button class="btn btn-primary" type="submit">{{ 'Crea auto' if is_new else 'Salva modifiche' }}</button>
+        {% if not is_new %}
+        <button class="btn btn-danger" type="submit" name="action" value="delete" onclick="return confirm('Eliminare questa auto?');">Elimina auto</button>
+        <a class="btn btn-secondary" href="{{ url_for('auto_nuova') }}">Nuova auto</a>
+        {% else %}
+        <a class="btn btn-secondary" href="{{ url_for('gestione_auto') }}">Annulla</a>
+        {% endif %}
+      </div>
+    </form>
+  </article>
+
+  <aside class="detail-card">
+    <span class="eyebrow">Azioni rapide</span>
+    <h2>Collegamenti utili</h2>
+    <div class="detail-actions">
+      <a class="btn btn-secondary" href="{{ url_for('gestione_auto') }}">Vai alla gestione</a>
+      <a class="btn btn-secondary" href="{{ url_for('home') }}">Home generale</a>
+      <a class="btn btn-secondary" href="{{ url_for('catalogo') }}">Catalogo utenti</a>
+    </div>
+  </aside>
+</section>
+
+<section class="timeline-section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Timeline</span>
+      <h2>Passaggi di stato</h2>
+    </div>
+    <p>Ogni volta che la macchina cambia stato, il passaggio viene registrato qui con la data.</p>
+  </div>
+
+  <ol class="timeline-list">
+    {% for step in car.timeline %}
+    <li class="timeline-item">
+      <div>
+        <strong>{{ step.status }}</strong>
+        <span>{{ step.operator }}</span>
+      </div>
+      <time datetime="{{ step.date }}">{{ step.date }}</time>
+    </li>
+    {% endfor %}
+    {% if car.timeline_count == 0 %}
+    <li class="timeline-item timeline-item--empty">
+      Nessun passaggio registrato.
+    </li>
+    {% endif %}
+  </ol>
+</section>
+
+{% if related %}
+<section class="preview-section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">Correlate</span>
+      <h2>Altre auto della flotta</h2>
+    </div>
+    <p>Usa queste schede per passare rapidamente a un altro veicolo.</p>
+  </div>
+
+  <div class="car-grid">
+    {% for item in related %}
+    <article class="car-card">
+      <div class="car-card__top">
+        <span class="badge">{{ item.status }}</span>
+        <strong>{{ item.brand }}</strong>
+      </div>
+      <h3>{{ item.modello }}</h3>
+      <p class="subtitle">{{ item.trim }} · {{ item.motorizzazione }}</p>
+      <a class="btn btn-secondary" href="{{ url_for('auto_dettaglio', car_id=item.id) }}">Apri scheda</a>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

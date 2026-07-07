@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <span class="eyebrow">Dashboard operativa</span>
+    <h1>Gestisci arrivi, disponibilità e catalogo auto da un solo pannello.</h1>
+    <p>
+      Una home chiara per monitorare la flotta MongoDB, con accesso rapido alla gestione dei veicoli,
+      al calendario arrivi e alla vetrina pubblica per gli utenti.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="{{ url_for('gestione_auto') }}">Vai alla gestione</a>
+      <a class="btn btn-secondary" href="{{ url_for('catalogo') }}">Apri catalogo</a>
+    </div>
+  </div>
+
+  <div class="hero-panel">
+    <div class="stat-grid">
+      <article class="stat-card">
+        <span>Auto totali</span>
+        <strong>{{ fleet_count }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Pronte</span>
+        <strong>{{ ready_count }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>In viaggio</span>
+        <strong>{{ transit_count }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>In preparazione</span>
+        <strong>{{ preparation_count }}</strong>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section-grid">
+  <article class="feature-card accent-blue">
+    <h2>Gestione auto</h2>
+    <p>Calendario consegne, filtro per marca, stato e allestimento, con tutte le schede veicolo sotto al calendario.</p>
+    <a href="{{ url_for('gestione_auto') }}">Apri gestione</a>
+  </article>
+  <article class="feature-card accent-amber">
+    <h2>Catalogo utenti</h2>
+    <p>Una vetrina pulita per mostrare le auto pubbliche con caratteristiche, timeline e filtri rapidi.</p>
+    <a href="{{ url_for('catalogo') }}">Apri catalogo</a>
+  </article>
+  <article class="feature-card accent-emerald">
+    <h2>Focus operativo</h2>
+    <p>Layout pensato per distinguere subito le auto in arrivo, quelle pronte e quelle ancora in preparazione.</p>
+    <a href="{{ url_for('gestione_auto') }}">Vedi calendario</a>
+  </article>
+</section>
+
+<section class="preview-section">
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">In evidenza</span>
+      <h2>Auto selezionate per la home</h2>
+    </div>
+    <p>Una selezione di modelli pronti per la dashboard o per il catalogo utenti.</p>
+  </div>
+
+  <div class="car-grid">
+    {% for car in featured %}
+    <article class="car-card">
+      <div class="car-card__top">
+        <span class="badge">{{ car.status }}</span>
+        <strong>{{ car.brand }}</strong>
+      </div>
+      <h3>{{ car.modello }}</h3>
+      <dl>
+        <div><dt>Allestimento</dt><dd>{{ car.trim }}</dd></div>
+        <div><dt>Motorizzazione</dt><dd>{{ car.motorizzazione }}</dd></div>
+        <div><dt>Ultimo evento</dt><dd>{{ car.arrival_date }}</dd></div>
+      </dl>
+      <a class="btn btn-secondary" href="{{ url_for('auto_dettaglio', car_id=car.id) }}">Vedi scheda</a>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

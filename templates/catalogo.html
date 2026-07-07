@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="page-header page-header--compact">
+  <div>
+    <span class="eyebrow">Catalogo utenti</span>
+    <h1>Scopri le auto disponibili</h1>
+    <p>Una vetrina semplice e leggibile per i clienti, con filtri e schede sintetiche.</p>
+  </div>
+  <div class="page-header__meta">
+    <div class="meta-pill"><span>{{ cars | length }}</span> auto pubbliche</div>
+    <div class="meta-pill"><span>{{ trim_options | length }}</span> allestimenti</div>
+  </div>
+</section>
+
+<section class="catalog-layout">
+  <aside class="filter-panel filter-panel--sticky">
+    <div class="panel-heading">
+      <div>
+        <span class="eyebrow">Filtri catalogo</span>
+        <h2>Trova il modello giusto</h2>
+      </div>
+      <p>Filtra per marca, tipo, carburante o cerca per testo libero.</p>
+    </div>
+
+    <label>
+      Cerca
+      <input type="search" id="catalog-search" placeholder="Es. Scenic, Alpine, Renault">
+    </label>
+
+    <label>
+      Marca
+      <select id="catalog-brand-filter">
+        <option value="">Tutte le marche</option>
+        {% for brand in brand_options %}
+        <option value="{{ brand }}">{{ brand }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Allestimento
+      <select id="catalog-trim-filter">
+        <option value="">Tutti gli allestimenti</option>
+        {% for trim in trim_options %}
+        <option value="{{ trim }}">{{ trim }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Stato
+      <select id="catalog-status-filter">
+        <option value="">Tutti gli stati</option>
+        {% for status in status_options %}
+        <option value="{{ status }}">{{ status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <button class="btn btn-secondary" type="button" id="catalog-reset-filters">Reset filtri</button>
+  </aside>
+
+  <div class="catalog-main">
+    <div class="featured-banner">
+      <div>
+        <span class="eyebrow">Punta di gamma</span>
+        <h2>Le auto disponibili oggi</h2>
+      </div>
+      <p>Ogni card evidenzia i dettagli più utili per la decisione d’acquisto.</p>
+    </div>
+
+    <div class="car-grid" id="catalog-grid">
+      {% for car in cars %}
+      <article class="car-card catalog-card" data-brand="{{ car.brand }}" data-status="{{ car.status }}" data-trim="{{ car.trim }}" data-search="{{ car.brand }} {{ car.modello }} {{ car.trim }} {{ car.motorizzazione }} {{ car.vin }}">
+        <div class="car-card__top">
+          <span class="badge badge--soft">{{ car.status }}</span>
+          <strong>{{ car.brand }}</strong>
+        </div>
+        <h3>{{ car.modello }}</h3>
+        <p class="subtitle">{{ car.trim }} · {{ car.motorizzazione }}</p>
+        <ul class="spec-list">
+          <li><span>VIN</span><strong>{{ car.vin }}</strong></li>
+          <li><span>Colore</span><strong>{{ car.color }}</strong></li>
+          <li><span>Venditore</span><strong>{{ car.seller }}</strong></li>
+          <li><span>Ultimo evento</span><strong>{{ car.arrival_date }}</strong></li>
+        </ul>
+        <a class="btn btn-secondary" href="{{ url_for('auto_dettaglio', car_id=car.id) }}">Scheda auto</a>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
