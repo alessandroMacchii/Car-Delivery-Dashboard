@@ -2,35 +2,56 @@
 
 {% block content %}
 <section class="hero">
-  <div class="hero-copy">
-    <span class="eyebrow">Dashboard operativa</span>
+  <div class="hero-copy glass-card">
+    <span class="eyebrow">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Dashboard operativa
+    </span>
     <h1>Gestisci arrivi, disponibilità e catalogo auto da un solo pannello.</h1>
     <p>
-      Una home chiara per monitorare la flotta MongoDB, con accesso rapido alla gestione dei veicoli,
-      al calendario arrivi e alla vetrina pubblica per gli utenti.
+      Una home chiara per monitorare la flotta MongoDB, con accesso rapido alla gestione
+      dei veicoli, al calendario arrivi e alla vetrina per gli utenti.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="{{ url_for('gestione_auto') }}">Vai alla gestione</a>
-      <a class="btn btn-secondary" href="{{ url_for('catalogo') }}">Apri catalogo</a>
+      <a class="btn btn-primary" href="{{ url_for('gestione_auto') }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Vai alla gestione
+      </a>
+      <a class="btn btn-secondary" href="{{ url_for('catalogo') }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Apri catalogo
+      </a>
     </div>
   </div>
 
-  <div class="hero-panel">
+  <div class="hero-panel glass-card" style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); box-shadow: var(--shadow-md);">
     <div class="stat-grid">
-      <article class="stat-card">
-        <span>Auto totali</span>
+      <article class="stat-card glass-card">
+        <span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:5px;"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          Auto totali
+        </span>
         <strong>{{ fleet_count }}</strong>
       </article>
-      <article class="stat-card">
-        <span>Pronte</span>
+      <article class="stat-card glass-card">
+        <span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:5px;"><polyline points="20 6 9 17 4 12"/></svg>
+          Pronte
+        </span>
         <strong>{{ ready_count }}</strong>
       </article>
-      <article class="stat-card">
-        <span>In viaggio</span>
+      <article class="stat-card glass-card">
+        <span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:5px;"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5 17l-5-5 5-5"/><path d="M19 7l5 5-5 5"/></svg>
+          In viaggio
+        </span>
         <strong>{{ transit_count }}</strong>
       </article>
-      <article class="stat-card">
-        <span>In preparazione</span>
+      <article class="stat-card glass-card">
+        <span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:5px;"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M2 12h2M20 12h2"/></svg>
+          In preparazione
+        </span>
         <strong>{{ preparation_count }}</strong>
       </article>
     </div>
@@ -38,20 +59,23 @@
 </section>
 
 <section class="section-grid">
-  <article class="feature-card accent-blue">
+  <article class="feature-card accent-blue glass-card">
+    <div class="feature-icon">📅</div>
     <h2>Gestione auto</h2>
-    <p>Calendario consegne, filtro per marca, stato e allestimento, con tutte le schede veicolo sotto al calendario.</p>
-    <a href="{{ url_for('gestione_auto') }}">Apri gestione</a>
+    <p>Calendario consegne, filtro per marca, stato e allestimento, con tutte le schede veicolo sotto il calendario.</p>
+    <a href="{{ url_for('gestione_auto') }}">Apri gestione →</a>
   </article>
-  <article class="feature-card accent-amber">
+  <article class="feature-card accent-amber glass-card">
+    <div class="feature-icon">🔍</div>
     <h2>Catalogo utenti</h2>
     <p>Una vetrina pulita per mostrare le auto pubbliche con caratteristiche, timeline e filtri rapidi.</p>
-    <a href="{{ url_for('catalogo') }}">Apri catalogo</a>
+    <a href="{{ url_for('catalogo') }}">Apri catalogo →</a>
   </article>
-  <article class="feature-card accent-emerald">
+  <article class="feature-card accent-emerald glass-card">
+    <div class="feature-icon">⚡</div>
     <h2>Focus operativo</h2>
     <p>Layout pensato per distinguere subito le auto in arrivo, quelle pronte e quelle ancora in preparazione.</p>
-    <a href="{{ url_for('gestione_auto') }}">Vedi calendario</a>
+    <a href="{{ url_for('gestione_auto') }}">Vedi calendario →</a>
   </article>
 </section>
 
@@ -66,9 +90,9 @@
 
   <div class="car-grid">
     {% for car in featured %}
-    <article class="car-card">
+    <article class="car-card glass-card">
       <div class="car-card__top">
-        <span class="badge">{{ car.status }}</span>
+        <span class="badge badge--soft">{{ car.status }}</span>
         <strong>{{ car.brand }}</strong>
       </div>
       <h3>{{ car.modello }}</h3>
@@ -77,7 +101,7 @@
         <div><dt>Motorizzazione</dt><dd>{{ car.motorizzazione }}</dd></div>
         <div><dt>Ultimo evento</dt><dd>{{ car.arrival_date }}</dd></div>
       </dl>
-      <a class="btn btn-secondary" href="{{ url_for('auto_dettaglio', car_id=car.id) }}">Vedi scheda</a>
+      <a class="btn btn-secondary" href="{{ url_for('auto_dettaglio', car_id=car.id) }}">Vedi scheda →</a>
     </article>
     {% endfor %}
   </div>
