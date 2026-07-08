@@ -6,7 +6,7 @@ from pathlib import Path
 from bson import json_util
 from pymongo import ReplaceOne
 
-from mongo_repository import get_collection
+from mongo_repository import collection
 
 
 def load_documents(file_path: Path) -> list[dict]:
@@ -22,7 +22,6 @@ def main() -> None:
 
 	file_path = Path(args.file).resolve()
 	documents = load_documents(file_path)
-	collection = get_collection()
 
 	if args.drop:
 		collection.drop()

@@ -102,23 +102,21 @@ use db_veicoli
 
 ## 1. Elenco veicoli ordinato — `list_vehicles()`
 
-**Cosa fa:** restituisce tutti i veicoli, ordinati per marca, poi modello, poi
-numero di telaio.
+**Cosa fa:** restituisce tutti i veicoli, ordinati per marca.
 
 ```js
-db.vehicles.find({}).sort({ marca: 1, modello: 1, vin_telaio: 1 })
+db.vehicles.find({}).sort({ marca: 1 })
 ```
 
 **Spiegazione:**
 - `db.vehicles` → la collection su cui lavoriamo.
 - `find({})` → cerca i documenti che rispettano il filtro. Il filtro `{}` è
   **vuoto**, quindi non filtra nulla: prende **tutti** i documenti.
-- `.sort({ marca: 1, ... })` → ordina il risultato. `1` = crescente (A→Z),
-  `-1` = decrescente (Z→A). Mettendo più campi, a parità di marca ordina per
-  modello, e a parità di modello per telaio.
+- `.sort({ marca: 1 })` → ordina il risultato per marca. `1` = crescente (A→Z),
+  `-1` = decrescente (Z→A).
 
 **Da dire a voce:** *"Prendo tutti i veicoli e li ordino alfabeticamente per
-marca, modello e telaio."*
+marca."*
 
 ### Variante A — solo veicoli "pubblici" (pagina Catalogo)
 
@@ -126,7 +124,7 @@ Il catalogo pubblico non deve mostrare le auto ancora in lavorazione.
 
 ```js
 db.vehicles.find({ stato_attuale: { $ne: "In Preparazione" } })
-           .sort({ marca: 1, modello: 1, vin_telaio: 1 })
+           .sort({ marca: 1 })
 ```
 
 - `{ stato_attuale: { $ne: "In Preparazione" } }` → il filtro ora c'è: tieni solo
@@ -223,7 +221,7 @@ Poi il **totale** e il raggruppamento "pronte" (pronta + arrivato) li calcoliamo
 in Python sommando questi conteggi — nessun operatore extra:
 
 ```python
-counts = {row["_id"]: row["count"] for row in get_collection().aggregate(pipeline)}
+counts = {row["_id"]: row["count"] for row in collection.aggregate(pipeline)}
 total          = sum(counts.values())
 ready          = counts.get("Pronta per la consegna", 0) + counts.get("Arrivato in Concessionaria", 0)
 in_transit     = counts.get("In Viaggio", 0)
