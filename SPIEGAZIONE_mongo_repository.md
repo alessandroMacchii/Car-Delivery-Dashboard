@@ -489,7 +489,7 @@ Trasforma i veicoli in **eventi per FullCalendar** (la libreria calendario JavaS
 | `upsert_vehicle_document`          | salvare/creare un'auto (POST)                              |
 | `delete_vehicle_document`          | cancellare un'auto                                         |
 
-> `collection` è importata anche da `seed_mongo.py` e `datagenerator.py` per popolare il database.
+> `collection` è importata anche da `datagenerator.py` per popolare il database.
 
 ## Concetti chiave da ricordare
 

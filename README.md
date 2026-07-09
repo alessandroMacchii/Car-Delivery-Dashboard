@@ -37,17 +37,6 @@ dell'app (quindi rispetta le variabili d'ambiente qui sopra):
 python datagenerator.py
 ```
 
-### Import da un file JSON (opzionale)
-
-Se hai un export della collection in formato JSON, puoi importarlo con:
-
-```powershell
-python seed_mongo.py --drop --file percorso/al/tuo_export.json
-```
-
-Lo script usa `ReplaceOne` con `upsert`, quindi puoi rilanciarlo senza duplicare
-i documenti. Nota: il file JSON non è incluso nel repository, devi fornirlo tu.
-
 ## Rotte
 
 - `/` home
