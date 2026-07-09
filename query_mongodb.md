@@ -100,6 +100,27 @@ use db_veicoli
 
 ---
 
+## Mappa: dove sta ogni query e dove si vede nella demo
+
+Tutte le query vivono in **`mongo_repository.py`**; le pagine che le usano sono
+definite in **`app.py`**. Riepilogo veloce:
+
+| # | Query / funzione                    | Nel codice (`mongo_repository.py`) | Nella demo (pagina · URL)                          |
+|---|-------------------------------------|------------------------------------|----------------------------------------------------|
+| 1 | Elenco veicoli — `list_vehicles()`  | `list_vehicles` (righe 63–75)      | Gestione auto · `/gestione-auto`                   |
+| 1A| Solo pubblici (`$ne`)               | `list_vehicles(public_only=True)`  | Catalogo · `/catalogo`                             |
+| 2 | Singolo veicolo — `get_vehicle_by_id()` | `get_vehicle_by_id` (righe 87–90) | Dettaglio auto · `/auto/<id>`                    |
+| 3 | Veicoli correlati                   | `list_vehicles(query=…, exclude_id=…)` | Dettaglio auto · `/auto/<id>` (sezione "Correlate") |
+| 4 | Riepilogo — `dashboard_summary()`   | `dashboard_summary` (righe 111–120)| Home · `/` (le 4 card in alto)                     |
+| 5 | Auto in evidenza — `featured_vehicles()` | `featured_vehicles` (righe 136–141) | Home · `/` (sezione "In evidenza")            |
+| 6 | Classifica venditori — `seller_leaderboard()` | `seller_leaderboard` (righe 123–133) | Home · `/` (card "Auto gestite per venditore") |
+| 7 | Scrittura (insert/update/delete)    | `upsert_vehicle_document` (93–99), `delete_vehicle_document` (102–108) | Salvataggio form · POST `/auto/<id>` e `/auto/nuova` |
+
+> Le rotte di `app.py` sono spiegate riga per riga in [`SPIEGAZIONE_app.md`](SPIEGAZIONE_app.md);
+> le funzioni del repository in [`SPIEGAZIONE_mongo_repository.md`](SPIEGAZIONE_mongo_repository.md).
+
+---
+
 ## 1. Elenco veicoli ordinato — `list_vehicles()`
 
 **Cosa fa:** restituisce tutti i veicoli, ordinati per marca.
@@ -118,6 +139,11 @@ db.vehicles.find({}).sort({ marca: 1 })
 **Da dire a voce:** *"Prendo tutti i veicoli e li ordino alfabeticamente per
 marca."*
 
+> **📍 Nel codice:** `mongo_repository.py` → `list_vehicles()` (righe 63–75).
+> **🖥️ Nella demo:** pagina **Gestione auto** (`/gestione-auto`) — è l'elenco di
+> schede sotto il calendario. La stessa funzione riempie anche i menu a tendina dei
+> filtri (tramite `build_filter_options`).
+
 ### Variante A — solo veicoli "pubblici" (pagina Catalogo)
 
 Il catalogo pubblico non deve mostrare le auto ancora in lavorazione.
@@ -131,18 +157,27 @@ db.vehicles.find({ stato_attuale: { $ne: "In Preparazione" } })
   i documenti in cui `stato_attuale` è **diverso da** `"In Preparazione"`.
 - `$ne` = *not equal*, "diverso da".
 
-### Variante B — filtrare per un campo annidato
+> **📍 Nel codice:** `mongo_repository.py` → `list_vehicles(public_only=True)`; la
+> condizione `$ne` è aggiunta alle righe 66–67.
+> **🖥️ Nella demo:** pagina **Catalogo** (`/catalogo`) — la vetrina pubblica, che
+> non deve mostrare le auto ancora in preparazione.
 
-Nella pagina di dettaglio mostriamo le auto correlate con la **dot notation** per
-entrare dentro un sotto-oggetto (es. tutte le auto assegnate a un certo cliente):
+### Variante B — filtrare per un campo annidato (dot notation)
+
+La **dot notation** permette di filtrare dentro un sotto-oggetto. Esempio: tutte le
+auto assegnate a un certo cliente:
 
 ```js
 db.vehicles.find({ "assegnato_a_cliente.nome": "Mario Rossi" })
 ```
 
-- `"assegnato_a_cliente.nome"` → la **dot notation** (`.`) permette di entrare
-  dentro un campo annidato: qui filtriamo sul `nome` dentro l'oggetto
-  `assegnato_a_cliente`.
+- `"assegnato_a_cliente.nome"` → il `.` entra dentro il campo annidato
+  `assegnato_a_cliente` e filtra sul suo `nome`.
+
+> **📍 Nota:** questo è un **esempio didattico** della dot notation: nella demo
+> **non** viene usato così. La query delle auto correlate (sezione 3) filtra invece
+> per `marca` (campo di primo livello). La dot notation la usi comunque nelle
+> aggregazioni per colore/allestimento (vedi le query extra proposte).
 
 ---
 
@@ -164,6 +199,13 @@ db.vehicles.findOne({ vin_telaio: "VF1ABCDE12345678" })
 **Da dire a voce:** *"Cerco un singolo veicolo per identificatore; se l'utente ha
 usato il numero di telaio invece dell'id interno, lo trovo comunque."*
 
+> **📍 Nel codice:** `mongo_repository.py` → `get_vehicle_by_id()` (righe 87–90) per
+> mostrare l'auto, e `get_vehicle_document_by_id()` (righe 78–84) per il documento
+> grezzo che riempie il form.
+> **🖥️ Nella demo:** pagina **Dettaglio auto** (`/auto/<id>`) — quando apri la
+> scheda di una singola vettura. La stessa `findOne` serve anche prima di salvare o
+> cancellare (POST `/auto/<id>`).
+
 ---
 
 ## 3. Veicoli correlati (stessa marca, escluso quello aperto)
@@ -182,6 +224,11 @@ db.vehicles.find({
   "Renault" **e** `_id` diverso da quello corrente.
 - `$ne` esclude il veicolo che stiamo visualizzando (altrimenti comparirebbe tra
   i "correlati" a sé stesso).
+
+> **📍 Nel codice:** `mongo_repository.py` → `list_vehicles(query={"marca": ...},
+> exclude_id=...)`; la chiamata è in `app.py`, rotta `auto_dettaglio` (righe 169–173).
+> **🖥️ Nella demo:** pagina **Dettaglio auto** (`/auto/<id>`), sezione **"Altre auto
+> della flotta"** in fondo alla scheda.
 
 ---
 
@@ -231,6 +278,10 @@ in_preparation = counts.get("In Preparazione", 0)
 **Da dire a voce:** *"Raggruppo per stato e conto quanti veicoli ci sono in
 ciascuno; il totale e la categoria 'pronte' li ricavo sommando i conteggi."*
 
+> **📍 Nel codice:** `mongo_repository.py` → `dashboard_summary()` (righe 111–120).
+> **🖥️ Nella demo:** **Home** (`/`) — le **4 card in alto** (Auto totali, Pronte,
+> In viaggio, In preparazione).
+
 ---
 
 ## 5. Auto in evidenza — `featured_vehicles()`
@@ -268,9 +319,53 @@ featured = vehicles[:3]
 **Da dire a voce:** *"Prendo tutte le auto, in Python le ordino per data
 dell'ultimo evento logistico e tengo le prime tre."*
 
+> **📍 Nel codice:** `mongo_repository.py` → `featured_vehicles()` (righe 136–141).
+> **🖥️ Nella demo:** **Home** (`/`) — la sezione **"In evidenza"** con le 3 schede
+> auto.
+
 ---
 
-## 6. Scrittura: inserimento, modifica, cancellazione
+## 6. Classifica venditori — `seller_leaderboard()`
+
+**Cosa fa:** conta quante auto sono assegnate a ciascun venditore e le ordina dal
+più attivo. Alimenta la card "Auto gestite per venditore" nella home. Usa gli
+stessi strumenti del riepilogo dashboard (`$group` + `$sum`), più un `.sort` sul
+risultato dell'aggregazione.
+
+```js
+db.vehicles.aggregate([
+  { $group: { _id: "$venditore", count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+])
+```
+
+**Spiegazione:**
+- `$group` con `_id: "$venditore"` → un gruppo (una riga) **per ogni venditore
+  diverso**. Il `$` davanti significa "il valore del campo `venditore`".
+- `count: { $sum: 1 }` → dentro ogni gruppo somma `1` per ogni documento: quante
+  auto ha quel venditore.
+- `$sort: { count: -1 }` → ordina i gruppi per conteggio **decrescente** (`-1`),
+  così il più attivo è in cima.
+
+**Risultato (una riga per venditore, già ordinato):**
+
+```js
+{ _id: "Sofia Verdi",        count: 267 }
+{ _id: "Marco Neri",         count: 249 }
+{ _id: "Laura Rossi",        count: 243 }
+{ _id: "Alessandro Bianchi", count: 241 }
+```
+
+**Da dire a voce:** *"Raggruppo per venditore, conto le auto di ciascuno e le
+ordino dal più attivo: è la classifica venditori."*
+
+> **📍 Nel codice:** `mongo_repository.py` → `seller_leaderboard()` (righe 123–133).
+> **🖥️ Nella demo:** **Home** (`/`) — la card **"Auto gestite per venditore"** con
+> le barre proporzionali.
+
+---
+
+## 7. Scrittura: inserimento, modifica, cancellazione
 
 Le operazioni che modificano i dati (usate dai form dell'app).
 
@@ -302,6 +397,13 @@ db.vehicles.deleteOne({ _id: ObjectId("64b0c1f2a3d4e5f600112233") })
 - `deleteOne(filtro)` → cancella **un** documento (il primo che combacia).
 - Esistono anche `insertMany`, `updateMany`, `deleteMany` per operare su più
   documenti in colpo solo.
+
+> **📍 Nel codice:** `mongo_repository.py` → `upsert_vehicle_document()` (righe 93–99,
+> fa `insert_one` o `update_one`) e `delete_vehicle_document()` (righe 102–108).
+> **🖥️ Nella demo:**
+> - **insert** → pagina **Nuova auto** (`/auto/nuova`), premendo "Crea auto".
+> - **update** → pagina **Dettaglio auto**, premendo "Salva modifiche" (POST `/auto/<id>`).
+> - **delete** → pagina **Dettaglio auto**, premendo "Elimina".
 
 ---
 

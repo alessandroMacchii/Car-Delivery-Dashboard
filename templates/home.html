@@ -82,6 +82,29 @@
 <section class="preview-section">
   <div class="section-heading">
     <div>
+      <span class="eyebrow">Classifica</span>
+      <h2>Auto gestite per venditore</h2>
+    </div>
+    <p>Numero di veicoli assegnati a ciascun venditore, dal più attivo.</p>
+  </div>
+
+  <div class="leaderboard glass-card">
+    {% for item in leaderboard %}
+    <div class="leaderboard__row">
+      <span class="leaderboard__rank">{{ loop.index }}</span>
+      <span class="leaderboard__name">{{ item.seller }}</span>
+      <span class="leaderboard__bar">
+        <span class="leaderboard__fill" style="width: {{ (item.count / leaderboard[0].count * 100) | round(0, 'floor') }}%;"></span>
+      </span>
+      <span class="leaderboard__count">{{ item.count }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="preview-section">
+  <div class="section-heading">
+    <div>
       <span class="eyebrow">In evidenza</span>
       <h2>Auto selezionate per la home</h2>
     </div>

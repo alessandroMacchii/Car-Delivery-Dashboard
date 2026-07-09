@@ -16,7 +16,7 @@ def load_documents(file_path: Path) -> list[dict]:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description="Importa il JSON delle auto in MongoDB")
-	parser.add_argument("--file", default="db_veicoli.vehicles.json", help="Percorso del file JSON da importare")
+	parser.add_argument("--file", required=True, help="Percorso del file JSON da importare")
 	parser.add_argument("--drop", action="store_true", help="Svuota la collection prima dell'import")
 	args = parser.parse_args()
 

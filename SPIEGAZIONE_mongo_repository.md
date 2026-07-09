@@ -1,9 +1,12 @@
 # Spiegazione di `mongo_repository.py` (riga per riga)
 
-Questo file è il **livello di accesso ai dati** (data access layer / repository) dell'applicazione
-Flask `Car-Delivery-Dashboard`. Tutto ciò che riguarda MongoDB — connessione, lettura, scrittura,
-cancellazione e "normalizzazione" dei documenti — vive qui. Il resto dell'app (`app.py`) non parla
-mai direttamente con MongoDB: chiama le funzioni di questo file.
+Questo file è il **livello di accesso ai dati** dell'applicazione Flask
+`Car-Delivery-Dashboard`. Tutto ciò che riguarda MongoDB — connessione, lettura, scrittura,
+cancellazione e "traduzione" dei documenti — vive qui. Il resto dell'app (`app.py`) non parla mai
+direttamente con MongoDB: chiama le funzioni di questo file.
+
+> Versione **semplificata** per la demo: niente type hint, una sola connessione come variabile,
+> poche funzioni con un compito chiaro ciascuna.
 
 ## Contesto: com'è fatto un documento nel database
 
@@ -39,427 +42,241 @@ La collezione è `db_veicoli.vehicles`. Ogni documento (generato da `datagenerat
 }
 ```
 
-Nota importante sui **nomi in due lingue**: nel database i campi sono in **italiano**
-(`marca`, `stato_attuale`, `configurazione`...). Le funzioni di questo file traducono questi
-documenti in dizionari con chiavi in **inglese** (`brand`, `status`, `trim`...) che i template
-HTML usano. Questa traduzione è il cuore di `normalize_vehicle`.
+Concetto chiave dei **nomi in due lingue**: nel database i campi sono in **italiano**
+(`marca`, `stato_attuale`, `configurazione`...). La funzione `normalize_vehicle` li traduce in un
+dizionario con chiavi in **inglese** (`brand`, `status`, `trim`...) che i template HTML usano.
+
+> Nota: `normalize_vehicle` estrae **solo i campi che i template mostrano davvero**. Campi come i
+> pacchetti o la batteria restano nel documento grezzo e vengono usati dal form di modifica (in
+> `app.py`), non dalla versione normalizzata.
 
 ---
 
-## Import e configurazione (righe 1–14)
-
-```python
-from __future__ import annotations
-```
-**Riga 1.** Permette di usare le annotazioni di tipo "moderne" (es. `str | None`, `list[dict]`)
-anche su versioni di Python in cui non sarebbero ancora native, perché rende tutte le annotazioni
-"stringhe" valutate solo se serve. In pratica: fa funzionare i type hint scritti sotto senza errori.
+## Import e connessione (righe 1–16)
 
 ```python
 import os
-from datetime import date, datetime
-from functools import lru_cache
-from typing import Any
-```
-**Righe 3–6.**
-- `os` → per leggere le variabili d'ambiente (URI del database, ecc.).
-- `date, datetime` → tipi per gestire le date della timeline.
-- `lru_cache` → decoratore di cache; qui serve a creare la connessione a Mongo **una sola volta**.
-- `Any` → tipo generico "qualsiasi cosa", usato nei type hint.
+from datetime import datetime
 
-```python
 from bson import ObjectId
-from pymongo import ASCENDING, DESCENDING, MongoClient
+from pymongo import ASCENDING, MongoClient
 ```
-**Righe 8–9.**
+**Righe 1–5.**
+- `os` → per leggere le variabili d'ambiente (URI del database, ecc.).
+- `datetime` → tipo per gestire le date della timeline.
 - `ObjectId` → la classe dell'`_id` di MongoDB. Serve a convertire una stringa (es. `"665f..."`)
   nell'oggetto ID vero e proprio per fare query per `_id`.
 - `MongoClient` → il client con cui ci si connette al server MongoDB.
-- `ASCENDING`, `DESCENDING` → costanti (`1` e `-1`) per indicare l'ordine di ordinamento nelle query.
-  `DESCENDING` è importato ma **non usato** nel file (import "di troppo").
+- `ASCENDING` → costante (`1`) che indica l'ordine crescente nell'ordinamento.
 
 ```python
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "db_veicoli")
 MONGO_COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "vehicles")
 ```
-**Righe 12–14.** Configurazione. `os.getenv("NOME", "default")` legge una variabile d'ambiente e,
-se non esiste, usa il valore di default. Così puoi cambiare database/collezione (es. in produzione)
-senza toccare il codice, ma in locale funziona subito con i default:
-- database `db_veicoli`, collezione `vehicles`, server locale sulla porta `27017`.
-
----
-
-## `get_collection()` — la connessione (righe 17–20)
+**Righe 11–13.** Configurazione. `os.getenv("NOME", "default")` legge una variabile d'ambiente e, se
+non esiste, usa il valore di default. Così puoi cambiare database/collezione senza toccare il codice,
+ma in locale funziona subito: database `db_veicoli`, collezione `vehicles`, porta `27017`.
 
 ```python
-@lru_cache(maxsize=1)
-def get_collection():
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
-    return client[MONGO_DB_NAME][MONGO_COLLECTION_NAME]
+client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
+collection = client[MONGO_DB_NAME][MONGO_COLLECTION_NAME]
 ```
+**Righe 15–16.** La connessione, fatta **una volta sola**:
+- **Riga 15** crea il client. `serverSelectionTimeoutMS=3000` = se in 3 secondi non trova un server
+  MongoDB, dà errore invece di restare bloccato.
+- **Riga 16** `client[DB][COLLEZIONE]` seleziona il database e poi la collezione. La variabile
+  `collection` è "la porta d'ingresso": tutte le funzioni sotto la usano per fare `find`, `insert_one`, ecc.
 
-- **Riga 17** `@lru_cache(maxsize=1)`: memorizza il risultato della funzione. Poiché non ci sono
-  argomenti, la funzione viene eseguita **davvero solo la prima volta**; da lì in poi restituisce
-  sempre lo stesso oggetto memorizzato. È il modo (semplice) per avere un'**unica connessione
-  condivisa** invece di aprirne una nuova a ogni chiamata.
-- **Riga 19** crea il client. `serverSelectionTimeoutMS=3000` = se in 3 secondi non trova un server
-  MongoDB, lancia un errore invece di restare bloccato all'infinito.
-- **Riga 20** `client[MONGO_DB_NAME][MONGO_COLLECTION_NAME]` = seleziona il database e poi la
-  collezione, e restituisce l'oggetto **collezione** su cui poi si fanno `find`, `insert_one`, ecc.
-
-> In sintesi: questa è "la porta d'ingresso" al database. Tutte le altre funzioni chiamano
-> `get_collection()` per ottenere la collezione su cui lavorare.
+> `MongoClient` **non si connette davvero** in questa riga; la connessione vera avviene alla prima
+> operazione. Per questo il file si può importare anche senza Mongo attivo. È anche il motivo per cui
+> `datagenerator.py` importa direttamente questa `collection`, riusando la stessa configurazione.
 
 ---
 
-## `format_date(value)` — formattare una data per l'utente (righe 23–32)
+## `format_date(value)` — formattare una data (righe 19–25)
 
 ```python
-def format_date(value: Any) -> str:
-    if value is None:
+def format_date(value):
+    # Trasforma una data (o stringa) nel formato leggibile gg/mm/aaaa.
+    if not value:
         return "N/D"
     if isinstance(value, datetime):
         return value.strftime("%d/%m/%Y")
-    if isinstance(value, date):
-        return value.strftime("%d/%m/%Y")
-    if isinstance(value, str):
-        return value[:10]
-    return str(value)
+    return str(value)[:10]
 ```
 
-Trasforma "qualsiasi" tipo di data nella stringa leggibile `giorno/mese/anno`. È robusta perché
-i dati possono arrivare in formati diversi.
+Trasforma una data nella stringa leggibile `giorno/mese/anno`.
 
-- **24–25** se il valore è `None` (assente) → restituisce `"N/D"` (Non Disponibile).
-- **26–27** se è un `datetime` (data + ora) → lo formatta come `08/07/2026`.
-- **28–29** se è un `date` (solo data) → stesso formato `08/07/2026`.
-- **30–31** se è già una stringa → prende i **primi 10 caratteri** (es. da `"2026-07-08T10:00"`
-  ottiene `"2026-07-08"`). Non riformatta, taglia soltanto.
-- **32** qualsiasi altro caso → lo converte a stringa e basta (fallback di sicurezza).
-
-Questa funzione è anche esposta ai template HTML (vedi `app.py`, `inject_helpers`), quindi si può
-usare direttamente dentro l'HTML.
+- **21–22** se il valore è vuoto/assente → restituisce `"N/D"` (Non Disponibile).
+- **23–24** se è un `datetime` → lo formatta come `08/07/2026`.
+- **25** in ogni altro caso (es. stringa `"2026-07-08T10:00"`) → lo converte a stringa e prende i
+  **primi 10 caratteri** → `"2026-07-08"`.
 
 ---
 
-## `_iso_date(value)` — data in formato ISO per calendario/JS (righe 35–44)
-
-```python
-def _iso_date(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, str):
-        return value[:10]
-    return None
-```
-
-Molto simile a `format_date`, ma produce il formato **ISO `AAAA-MM-GG`** (es. `2026-07-08`), che è
-quello richiesto dalla libreria calendario nel frontend (FullCalendar).
-
-- Il prefisso `_` nel nome (`_iso_date`) è la convenzione Python per dire "**funzione privata/interna**",
-  usata solo dentro questo file.
-- **36–37** `None` → `None` (nessuna data).
-- **38–39** `datetime` → `.date()` toglie l'ora, `.isoformat()` produce `2026-07-08`.
-- **40–41** `date` → direttamente `.isoformat()`.
-- **42–43** stringa → primi 10 caratteri.
-- **44** altro → `None`.
-
-Differenza chiave con `format_date`: qui il caso "sconosciuto" restituisce `None` (non una stringa),
-perché a valle serve poter dire "non c'è una data valida" e saltare l'evento nel calendario.
-
----
-
-## `_timeline_date(entry)` — data dell'ultimo evento (righe 47–50)
-
-```python
-def _timeline_date(entry: dict[str, Any] | None) -> str:
-    if not entry:
-        return "N/D"
-    return format_date(entry.get("data"))
-```
-
-Riceve **un singolo evento** della timeline (un dizionario tipo
-`{"stato": ..., "data": ..., "operatore": ...}`) e ne restituisce la data formattata.
-
-- **48–49** se `entry` è `None` o vuoto → `"N/D"`.
-- **50** altrimenti estrae il campo `data` con `entry.get("data")` (che restituisce `None` se manca,
-  senza errori) e lo passa a `format_date`.
-
----
-
-## `_normalize_timeline(entries)` — tradurre la timeline (righe 53–63)
-
-```python
-def _normalize_timeline(entries: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    normalized = []
-    for entry in entries or []:
-        normalized.append(
-            {
-                "status": entry.get("stato", ""),
-                "date": format_date(entry.get("data")),
-                "operator": entry.get("operatore", ""),
-            }
-        )
-    return normalized
-```
-
-Prende la lista di eventi in **italiano** (`stato`, `data`, `operatore`) e la ritraduce in
-**inglese** (`status`, `date`, `operator`) con la data già formattata, pronta per i template.
-
-- **54** parte da una lista vuota che riempirà.
-- **55** `for entry in entries or []`: il trucco `entries or []` evita l'errore se `entries` è `None`
-  — in quel caso itera su una lista vuota (zero giri).
-- **56–62** per ogni evento crea un nuovo dizionario tradotto. `entry.get("stato", "")` significa
-  "prendi `stato`, o stringa vuota se manca" → così non si rompe mai per campi assenti.
-- **63** restituisce la lista tradotta.
-
----
-
-## `_timeline_sort_key(vehicle)` — chiave di ordinamento (righe 66–67)
-
-```python
-def _timeline_sort_key(vehicle: dict[str, Any]) -> str:
-    return vehicle.get("arrival_date_raw") or vehicle.get("arrival_date") or ""
-```
-
-Restituisce un valore da usare per **ordinare** i veicoli per data di arrivo.
-
-- Prova prima `arrival_date_raw` (la data "grezza", cioè l'oggetto `datetime` originale);
-  se manca usa `arrival_date` (la stringa formattata); se manca anche quella usa `""`.
-- Il pattern `a or b or c` restituisce il primo valore "vero" (non `None`, non vuoto).
-
-> ⚠️ Nota tecnica: questa funzione **non viene chiamata da nessuna parte** nel file (né in `app.py`).
-> È codice "morto"/di riserva. L'ordinamento vero avviene con altre chiavi (vedi `featured_vehicles`).
-
----
-
-## `normalize_vehicle(document)` — la funzione centrale (righe 70–98)
+## `normalize_vehicle(document)` — la funzione centrale (righe 28–60)
 
 È la funzione più importante: prende **un documento MongoDB grezzo** (in italiano, annidato) e lo
 appiattisce/traduce in un **dizionario "pulito"** che i template HTML sanno usare.
 
 ```python
-def normalize_vehicle(document: dict[str, Any]) -> dict[str, Any]:
+def normalize_vehicle(document):
     config = document.get("configurazione") or {}
     customer = document.get("assegnato_a_cliente") or {}
     timeline = document.get("logistica_timeline") or []
     last_step = timeline[-1] if timeline else None
+    last_date = last_step["data"] if last_step else None
 ```
 
-- **71** estrae il sotto-dizionario `configurazione`; se manca usa `{}` (dizionario vuoto), così le
-  `.get()` successive non esplodono.
-- **72** stessa cosa per il cliente assegnato.
-- **73** stessa cosa per la timeline (lista vuota se assente).
-- **74** `last_step` = **l'ultimo evento** della timeline (`timeline[-1]` = ultimo elemento). Se la
-  timeline è vuota → `None`. L'ultimo evento rappresenta lo "stato logistico più recente" ed è la
-  base per calcolare la data di arrivo.
+- **31** estrae il sotto-dizionario `configurazione`; se manca usa `{}` (dizionario vuoto), così le
+  `.get()` successive non esplodono. Il trucco `x or {}` significa "usa `x`, ma se è `None`/vuoto usa `{}`".
+- **32** stessa cosa per il cliente assegnato.
+- **33** stessa cosa per la timeline (lista vuota se assente).
+- **34** `last_step` = **l'ultimo evento** della timeline (`timeline[-1]`). Se vuota → `None`.
+- **35** `last_date` = la data di quell'ultimo evento (o `None` se non c'è nessun evento).
 
 ```python
     return {
-        "id": str(document.get("_id")),
+        "id": str(document["_id"]),
         "vin": document.get("vin_telaio", ""),
         "brand": document.get("marca", ""),
         "modello": document.get("modello", ""),
         "status": document.get("stato_attuale", ""),
         "seller": document.get("venditore", ""),
-```
-
-Il dizionario di ritorno (traduzione italiano → inglese):
-- **76** `id`: l'`_id` di Mongo convertito in **stringa** con `str(...)` (perché `ObjectId` non è
-  serializzabile direttamente e negli URL serve una stringa).
-- **77** `vin` ← `vin_telaio`.
-- **78** `brand` ← `marca`.
-- **79** `modello` (resta uguale).
-- **80** `status` ← `stato_attuale`.
-- **81** `seller` ← `venditore`.
-
-```python
         "customer_name": customer.get("nome", ""),
-        "customer_email": customer.get("email", ""),
-        "customer_phone": customer.get("numero_telefono", ""),
-```
-- **82–84** dati del cliente, presi dal sotto-dizionario `customer` estratto prima.
-
-```python
         "trim": config.get("allestimento", "N/D"),
         "motorizzazione": config.get("motorizzazione", "N/D"),
         "color": config.get("colore_esterno", "N/D"),
-        "included_packages": config.get("pacchetti_inclusi", []),
-        "extra_packages": config.get("pacchetti_aggiuntivi", []),
-        "battery_kwh": config.get("capacita_batteria_kw"),
-        "charging_cable": config.get("cavo_ricarica_incluso"),
 ```
-- **85–91** dati di configurazione:
-  - `trim` ← `allestimento` (default `"N/D"`).
-  - `motorizzazione`, `color` ← `colore_esterno` (default `"N/D"`).
-  - `included_packages`, `extra_packages`: liste (default `[]`).
-  - `battery_kwh`, `charging_cable`: **senza default**, quindi valgono `None` se assenti. Questo è
-    voluto: sono campi presenti **solo sulle auto elettriche** (vedi il "Polymorphic Pattern" in
-    `datagenerator.py`), quindi `None` significa "auto non elettrica / dato non applicabile".
+Il dizionario di ritorno (traduzione italiano → inglese):
+- **38** `id`: l'`_id` di Mongo convertito in **stringa** con `str(...)` (serve negli URL).
+- **39–43** `vin` ← `vin_telaio`, `brand` ← `marca`, `modello`, `status` ← `stato_attuale`,
+  `seller` ← `venditore`.
+- **44** `customer_name` ← `nome` del cliente.
+- **45–47** `trim` ← `allestimento`, `motorizzazione`, `color` ← `colore_esterno` (default `"N/D"`).
 
 ```python
-        "timeline": _normalize_timeline(timeline),
+        "timeline": [
+            {
+                "status": step.get("stato", ""),
+                "date": format_date(step.get("data")),
+                "operator": step.get("operatore", ""),
+            }
+            for step in timeline
+        ],
+```
+- **48–55** `timeline`: traduce **ogni** evento da italiano (`stato`, `data`, `operatore`) a inglese
+  (`status`, `date`, `operator`), con la data già formattata. È una **list comprehension**: "per ogni
+  `step` nella timeline, crea questo dizionario tradotto". Se la timeline è vuota, esce una lista vuota.
+
+```python
         "timeline_count": len(timeline),
-        "arrival_date": _timeline_date(last_step),
-        "arrival_date_iso": _iso_date(last_step.get("data") if last_step else None),
-        "arrival_date_raw": last_step.get("data") if last_step else None,
-        "public": document.get("stato_attuale") != "In Preparazione",
+        "arrival_date": format_date(last_date),
+        "arrival_date_iso": last_date.date().isoformat() if isinstance(last_date, datetime) else None,
+        "arrival_date_raw": last_date,
     }
 ```
-- **92** `timeline`: la timeline tradotta (chiama `_normalize_timeline`).
-- **93** `timeline_count`: quanti eventi ci sono (`len`).
-- **94** `arrival_date`: data dell'ultimo evento **formattata** `gg/mm/aaaa` (via `_timeline_date`).
-- **95** `arrival_date_iso`: la stessa data in formato ISO per il calendario.
-  `last_step.get("data") if last_step else None` = prendi la data dell'ultimo evento, ma solo se
-  esiste un ultimo evento (altrimenti `None`, per non chiamare `.get` su `None` → errore).
-- **96** `arrival_date_raw`: la data **grezza** (oggetto `datetime` originale), utile per ordinare
+- **56** `timeline_count`: quanti eventi ci sono (`len`).
+- **57** `arrival_date`: data dell'ultimo evento **formattata** `gg/mm/aaaa`.
+- **58** `arrival_date_iso`: la stessa data in formato ISO `2026-07-08`, richiesto dal calendario del
+  frontend. Se non è una data valida → `None` (così il calendario salta quell'auto).
+- **59** `arrival_date_raw`: la data **grezza** (oggetto `datetime` originale), utile per ordinare
   correttamente (confrontare datetime è più affidabile che confrontare stringhe formattate).
-- **97** `public`: campo booleano calcolato. È `True` per tutte le auto **tranne** quelle
-  `"In Preparazione"`. Serve a decidere cosa mostrare nel catalogo pubblico: un'auto ancora in
-  preparazione non deve comparire ai clienti.
 
-> Riassunto: `normalize_vehicle` è il "traduttore universale". Ogni volta che leggi un veicolo dal
-> DB per mostrarlo, passa da qui.
+> `normalize_vehicle` è il "traduttore universale" per **mostrare** i dati, e calcola anche campi che
+> nel DB non esistono (`arrival_date`, `timeline_count`). Per **modificare** un'auto, invece, il form
+> usa il documento grezzo (vedi `get_vehicle_document_by_id`).
 
 ---
 
-## `_vehicle_query(query, public_only)` — costruire i criteri di filtro (righe 101–105)
+## `list_vehicles(...)` — elenco veicoli (righe 63–75)
 
 ```python
-def _vehicle_query(query: dict[str, Any] | None = None, public_only: bool = False) -> dict[str, Any]:
-    criteria: dict[str, Any] = dict(query or {})
+def list_vehicles(query=None, public_only=False, limit=None, exclude_id=None):
+    # Costruisce il filtro e cerca i veicoli con find(), ordinati per marca.
+    criteria = dict(query or {})
     if public_only:
         criteria["stato_attuale"] = {"$ne": "In Preparazione"}
-    return criteria
-```
-
-Costruisce il dizionario di **filtro** (in gergo Mongo: il "query filter") da passare a `find()`.
-
-- **102** `dict(query or {})`: parte dal filtro ricevuto, oppure da un dizionario vuoto. Usa `dict(...)`
-  per farne una **copia**, così non modifica il dizionario originale del chiamante (buona pratica).
-- **103–104** se `public_only=True` aggiunge la condizione `stato_attuale != "In Preparazione"`.
-  `{"$ne": ...}` è l'operatore MongoDB "**not equal**" (diverso da).
-- **105** restituisce i criteri. Esempio di risultato: `{"marca": "Renault", "stato_attuale": {"$ne": "In Preparazione"}}`.
-
----
-
-## `list_vehicles(...)` — elenco veicoli (righe 108–126)
-
-```python
-def list_vehicles(
-    query: dict[str, Any] | None = None,
-    public_only: bool = False,
-    limit: int | None = None,
-    exclude_id: str | None = None,
-) -> list[dict[str, Any]]:
-```
-**108–113** La funzione più usata: restituisce una lista di veicoli **normalizzati**. Parametri:
-- `query`: filtri extra (es. `{"marca": "Renault"}`).
-- `public_only`: se `True`, esclude le auto in preparazione (per il catalogo).
-- `limit`: numero massimo di risultati.
-- `exclude_id`: un ID da **escludere** (usato per "veicoli correlati", per non mostrare l'auto stessa).
-
-```python
-    criteria = _vehicle_query(query=query, public_only=public_only)
     if exclude_id:
         criteria["_id"] = {"$ne": ObjectId(exclude_id)}
-```
-- **114** costruisce i criteri base con la funzione vista sopra.
-- **115–116** se è stato passato `exclude_id`, aggiunge la condizione "`_id` diverso da questo ID".
-  Nota `ObjectId(exclude_id)`: la stringa va riconvertita in `ObjectId` per confrontarla col DB.
 
-```python
-    documents = list(
-        get_collection()
-        .find(criteria)
-        .sort([("marca", ASCENDING), ("modello", ASCENDING), ("vin_telaio", ASCENDING)])
-    )
-```
-- **117–121** esegue la query:
-  - `get_collection().find(criteria)` → trova tutti i documenti che rispettano i criteri.
-  - `.sort([...])` → ordina lato database per marca, poi modello, poi VIN, tutti crescenti.
-  - `list(...)` → forza l'esecuzione della query e mette i risultati in una lista Python.
-
-```python
+    documents = collection.find(criteria).sort("marca", ASCENDING)
     vehicles = [normalize_vehicle(document) for document in documents]
-    vehicles.sort(key=lambda vehicle: (vehicle["brand"], vehicle["modello"], vehicle["vin"]))
-```
-- **122** normalizza **ogni** documento (list comprehension) → lista di dizionari puliti.
-- **123** riordina **di nuovo**, stavolta lato Python, sulle chiavi tradotte (`brand`, `modello`, `vin`).
-  È in parte ridondante col `.sort()` del DB, ma garantisce l'ordine finale sui campi normalizzati.
-
-```python
     if limit is not None:
         return vehicles[:limit]
     return vehicles
 ```
-- **124–126** se è stato indicato un `limit`, restituisce solo i primi `limit` elementi
-  (`vehicles[:limit]`); altrimenti tutta la lista.
+
+La funzione più usata: restituisce una lista di veicoli **normalizzati**. Parametri:
+- `query`: filtri extra (es. `{"marca": "Renault"}`).
+- `public_only`: se `True`, esclude le auto in preparazione (per il catalogo).
+- `limit`: numero massimo di risultati.
+- `exclude_id`: un ID da **escludere** (usato per i "veicoli correlati").
+
+- **65** `dict(query or {})`: parte dal filtro ricevuto (o vuoto). `dict(...)` ne fa una **copia**,
+  così non modifica quello del chiamante.
+- **66–67** se `public_only=True` aggiunge la condizione `stato_attuale != "In Preparazione"`.
+  `{"$ne": ...}` è l'operatore MongoDB "**not equal**".
+- **68–69** se è passato `exclude_id`, aggiunge "`_id` diverso da questo ID". `ObjectId(exclude_id)`:
+  la stringa va riconvertita in `ObjectId` per confrontarla col DB.
+- **71** esegue la query: `collection.find(criteria)` trova i documenti, `.sort("marca", ASCENDING)`
+  li ordina per marca crescente.
+- **72** normalizza **ogni** documento (list comprehension).
+- **73–75** se è indicato un `limit` restituisce solo i primi `limit` elementi, altrimenti tutta la lista.
 
 ---
 
-## `get_vehicle_by_id(vehicle_id)` — un veicolo normalizzato (righe 129–136)
+## `get_vehicle_document_by_id(vehicle_id)` — documento grezzo (righe 78–84)
 
 ```python
-def get_vehicle_by_id(vehicle_id: str) -> dict[str, Any] | None:
-    collection = get_collection()
-    document = None
+def get_vehicle_document_by_id(vehicle_id):
+    # Cerca un veicolo per _id oppure, se non lo trova, per numero di telaio.
     if ObjectId.is_valid(vehicle_id):
         document = collection.find_one({"_id": ObjectId(vehicle_id)})
-    if document is None:
-        document = collection.find_one({"vin_telaio": vehicle_id})
+        if document:
+            return document
+    return collection.find_one({"vin_telaio": vehicle_id})
+```
+
+Cerca **un solo** veicolo e restituisce il documento **grezzo** (in italiano, com'è nel DB).
+Accetta sia un `_id` di Mongo sia un VIN (numero di telaio).
+
+- **80** se `vehicle_id` ha la forma di un ObjectId valido (`ObjectId.is_valid`), lo cerca per `_id`.
+- **82–83** se lo ha trovato, lo restituisce subito.
+- **84** altrimenti lo cerca per `vin_telaio`. Questo rende gli URL flessibili: `/auto/<id>` funziona
+  sia con l'ID sia col telaio. Se non trova nulla, `find_one` restituisce `None`.
+
+---
+
+## `get_vehicle_by_id(vehicle_id)` — veicolo normalizzato (righe 87–90)
+
+```python
+def get_vehicle_by_id(vehicle_id):
+    # Come sopra, ma restituisce il veicolo gia' normalizzato (per mostrarlo).
+    document = get_vehicle_document_by_id(vehicle_id)
     return normalize_vehicle(document) if document else None
 ```
 
-Cerca **un solo** veicolo e lo restituisce **normalizzato** (pronto per la vista di dettaglio).
-La particolarità: accetta sia un `_id` di Mongo sia un VIN.
+**Riusa** la funzione precedente (niente codice duplicato) e in più **normalizza** il risultato.
 
-- **130** ottiene la collezione.
-- **131** parte da `document = None`.
-- **132–133** se `vehicle_id` **ha la forma** di un ObjectId valido (`ObjectId.is_valid` controlla
-  senza lanciare eccezioni), prova a cercarlo per `_id`.
-- **134–135** se non ha trovato nulla (o l'id non era un ObjectId), prova a cercarlo per `vin_telaio`.
-  Questo rende gli URL flessibili: `/auto/<id>` funziona sia con l'ID che col numero di telaio.
-- **136** se ha trovato un documento lo normalizza, altrimenti restituisce `None` (→ l'app farà 404).
+- **89** chiama `get_vehicle_document_by_id` per prendere il documento grezzo.
+- **90** se lo ha trovato lo normalizza, altrimenti restituisce `None` (→ l'app farà 404).
 
----
-
-## `get_vehicle_document_by_id(vehicle_id)` — il documento GREZZO (righe 139–146)
-
-```python
-def get_vehicle_document_by_id(vehicle_id: str) -> dict[str, Any] | None:
-    collection = get_collection()
-    document = None
-    if ObjectId.is_valid(vehicle_id):
-        document = collection.find_one({"_id": ObjectId(vehicle_id)})
-    if document is None:
-        document = collection.find_one({"vin_telaio": vehicle_id})
-    return document
-```
-
-**Identica** alla precedente, con **una** differenza cruciale alla fine:
-- **146** restituisce il documento **grezzo** (in italiano, com'è nel DB), **senza** normalizzarlo.
-
-**Perché esistono due versioni?**
+**Perché due funzioni?**
 - `get_vehicle_by_id` (normalizzato) serve per **mostrare** i dati (i template vogliono `brand`, `status`...).
-- `get_vehicle_document_by_id` (grezzo) serve per **modificare** i dati: in `app.py`, prima di un
-  update, serve il documento originale (con `logistica_timeline` intatta e i nomi italiani) per
-  aggiungere un nuovo evento alla timeline senza perdere lo storico.
+- `get_vehicle_document_by_id` (grezzo) serve per **modificare** i dati: in `app.py`, il form di
+  modifica riempie i campi partendo dal documento originale (con i nomi italiani e la timeline intatta).
 
 ---
 
-## `upsert_vehicle_document(document, vehicle_id)` — inserire o aggiornare (righe 149–155)
+## `upsert_vehicle_document(document, vehicle_id)` — inserire o aggiornare (righe 93–99)
 
 "Upsert" = **UP**date + in**SERT**: aggiorna se esiste, altrimenti crea.
 
 ```python
-def upsert_vehicle_document(document: dict[str, Any], vehicle_id: str | None = None) -> str:
-    collection = get_collection()
+def upsert_vehicle_document(document, vehicle_id=None):
+    # Se c'e' un id -> aggiorna (update_one), altrimenti crea (insert_one).
     if vehicle_id and ObjectId.is_valid(vehicle_id):
         collection.update_one({"_id": ObjectId(vehicle_id)}, {"$set": document})
         return vehicle_id
@@ -467,65 +284,43 @@ def upsert_vehicle_document(document: dict[str, Any], vehicle_id: str | None = N
     return str(result.inserted_id)
 ```
 
-- **150** ottiene la collezione.
-- **151** se è stato passato un `vehicle_id` **ed** è un ObjectId valido → è un **aggiornamento**.
-- **152** `update_one(filtro, aggiornamento)`:
-  - filtro `{"_id": ObjectId(vehicle_id)}` = "il documento con questo id".
-  - `{"$set": document}` = sovrascrive i campi con quelli del nuovo documento. `$set` è l'operatore
-    MongoDB che imposta/aggiorna i campi indicati.
-- **153** restituisce lo stesso `vehicle_id` (l'id non cambia in un update).
-- **154** se non c'era un id valido → è un **inserimento**: `insert_one` crea un nuovo documento.
-- **155** restituisce il nuovo `_id` generato da Mongo, convertito in stringa (usato per fare il
-  redirect alla pagina della nuova auto).
+- **95** se è passato un `vehicle_id` **ed** è un ObjectId valido → è un **aggiornamento**.
+- **96** `update_one(filtro, aggiornamento)`: il filtro `{"_id": ...}` sceglie il documento;
+  `{"$set": document}` sovrascrive i campi indicati lasciando intatti gli altri.
+- **97** restituisce lo stesso `vehicle_id` (in un update l'id non cambia).
+- **98** se non c'era un id valido → **inserimento**: `insert_one` crea un nuovo documento.
+- **99** restituisce il nuovo `_id` generato da Mongo, convertito in stringa (per il redirect).
 
 ---
 
-## `delete_vehicle_document(vehicle_id)` — cancellare (righe 158–164)
+## `delete_vehicle_document(vehicle_id)` — cancellare (righe 102–108)
 
 ```python
-def delete_vehicle_document(vehicle_id: str) -> bool:
-    collection = get_collection()
+def delete_vehicle_document(vehicle_id):
+    # Cancella per _id oppure per numero di telaio.
     if ObjectId.is_valid(vehicle_id):
         result = collection.delete_one({"_id": ObjectId(vehicle_id)})
-        return result.deleted_count > 0
-    result = collection.delete_one({"vin_telaio": vehicle_id})
+    else:
+        result = collection.delete_one({"vin_telaio": vehicle_id})
     return result.deleted_count > 0
 ```
 
-Cancella un veicolo e restituisce `True`/`False` a seconda che qualcosa sia stato davvero cancellato.
+Cancella un veicolo e restituisce `True`/`False` a seconda che qualcosa sia stato cancellato.
 
-- **160–162** se l'id è un ObjectId valido → cancella per `_id`. `result.deleted_count` è quanti
-  documenti sono stati eliminati (0 o 1 con `delete_one`); `> 0` lo trasforma in booleano.
-- **163–164** altrimenti tenta la cancellazione per `vin_telaio`.
-
-Stesso pattern "id o VIN" delle funzioni di lettura, per coerenza.
+- **104–105** se l'id è un ObjectId valido → cancella per `_id`.
+- **106–107** altrimenti → cancella per `vin_telaio`.
+- **108** `result.deleted_count` è quanti documenti sono stati eliminati (0 o 1); `> 0` lo trasforma
+  in booleano.
 
 ---
 
-## `dashboard_summary()` — i numeri della home (righe 167–180)
+## `dashboard_summary()` — i numeri della home (righe 111–120)
 
 ```python
-def dashboard_summary() -> dict[str, int]:
-    # Raggruppa i veicoli per stato e conta quanti ce ne sono in ciascuno.
-    # Stesso schema visto a lezione: $group con _id su un campo + accumulatore $sum.
-    pipeline = [
-        {"$group": {"_id": "$stato_attuale", "count": {"$sum": 1}}},
-    ]
-    counts = {row["_id"]: row["count"] for row in get_collection().aggregate(pipeline)}
-```
-
-Calcola le statistiche mostrate in homepage usando una **aggregation pipeline** di MongoDB (più
-efficiente che scaricare tutti i documenti e contarli in Python).
-
-- **170–172** la pipeline ha un solo stadio: `$group`.
-  - `"_id": "$stato_attuale"` = raggruppa i documenti per valore del campo `stato_attuale`.
-    (Il `$` davanti significa "il valore del campo", non la stringa letterale.)
-  - `"count": {"$sum": 1}` = per ogni gruppo somma `1` a ogni documento → cioè li conta.
-- **173** `.aggregate(pipeline)` esegue la pipeline e restituisce righe tipo
-  `{"_id": "In Viaggio", "count": 30}`. La **dict comprehension** le trasforma in un dizionario
-  comodo: `{"In Viaggio": 30, "In Preparazione": 12, ...}`.
-
-```python
+def dashboard_summary():
+    # Raggruppa i veicoli per stato e li conta ($group + $sum).
+    pipeline = [{"$group": {"_id": "$stato_attuale", "count": {"$sum": 1}}}]
+    counts = {row["_id"]: row["count"] for row in collection.aggregate(pipeline)}
     return {
         "total": sum(counts.values()),
         "ready": counts.get("Pronta per la consegna", 0) + counts.get("Arrivato in Concessionaria", 0),
@@ -533,48 +328,81 @@ efficiente che scaricare tutti i documenti e contarli in Python).
         "in_preparation": counts.get("In Preparazione", 0),
     }
 ```
-- **175–180** compone il riepilogo finale:
-  - `total`: somma di tutti i conteggi = numero totale di veicoli.
-  - `ready`: veicoli "pronti", cioè la somma di due stati ("Pronta per la consegna" +
-    "Arrivato in Concessionaria"). `counts.get(..., 0)` mette 0 se quello stato non esiste.
-  - `in_transit`: veicoli "In Viaggio".
-  - `in_preparation`: veicoli "In Preparazione".
 
-Questi quattro numeri finiscono nelle card della home (`app.py`, funzione `home`).
+Calcola le statistiche della homepage con una **aggregation pipeline** (più efficiente che scaricare
+tutti i documenti e contarli in Python).
+
+- **113** la pipeline ha un solo stadio, `$group`:
+  - `"_id": "$stato_attuale"` = raggruppa per valore del campo `stato_attuale`. Il `$` significa
+    "il **valore** del campo".
+  - `"count": {"$sum": 1}` = per ogni gruppo somma `1` a ogni documento → li conta.
+- **114** `.aggregate(pipeline)` restituisce righe tipo `{"_id": "In Viaggio", "count": 30}`. La
+  **dict comprehension** le trasforma in `{"In Viaggio": 30, ...}`.
+- **115–120** compone il riepilogo: `total` (somma di tutti), `ready` (somma di due stati),
+  `in_transit`, `in_preparation`. `counts.get(..., 0)` mette 0 se quello stato non esiste.
 
 ---
 
-## `featured_vehicles(limit=3)` — le auto in evidenza (righe 183–192)
+## `seller_leaderboard()` — classifica venditori (righe 123–133)
 
 ```python
-def featured_vehicles(limit: int = 3) -> list[dict[str, Any]]:
-    # Le auto con l'evento di timeline piu' recente: recupero tutti i veicoli con
-    # find() e li ordino in Python sulla data dell'ultimo evento (gia' calcolata
-    # in normalize_vehicle), tenendo solo i primi.
+def seller_leaderboard():
+    # Classifica venditori: raggruppa per venditore, conta le auto ($group +
+    # $sum) e ordina dal piu' attivo ($sort).
+    pipeline = [
+        {"$group": {"_id": "$venditore", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    return [
+        {"seller": row["_id"], "count": row["count"]}
+        for row in collection.aggregate(pipeline)
+    ]
+```
+
+Conta quante auto sono assegnate a ciascun venditore, ordinate dal più attivo. Alimenta la card
+"Auto gestite per venditore" nella home. Usa gli stessi strumenti di `dashboard_summary` (`$group` +
+`$sum`), con in più uno stadio `$sort`.
+
+- **126–129** la pipeline ha due stadi:
+  - `{"$group": {"_id": "$venditore", "count": {"$sum": 1}}}` → un gruppo per ogni venditore diverso;
+    `$sum: 1` conta le auto di ciascuno.
+  - `{"$sort": {"count": -1}}` → ordina i gruppi per conteggio **decrescente** (`-1`), così il più
+    attivo è in cima.
+- **130–133** trasforma le righe (tipo `{"_id": "Sofia Verdi", "count": 267}`) in dizionari più
+  leggibili `{"seller": "...", "count": ...}`, pronti per il template.
+
+> Nella home il template disegna una barra proporzionale: la larghezza di ogni riga è
+> `count / count_del_primo * 100`, quindi il primo venditore è al 100% e gli altri in proporzione.
+
+---
+
+## `featured_vehicles(limit=3)` — le auto in evidenza (righe 136–141)
+
+```python
+def featured_vehicles(limit=3):
+    # Le auto con l'ultimo aggiornamento piu' recente: prendo tutti i veicoli
+    # e li ordino per data dell'ultimo evento, tenendo solo i primi.
     vehicles = list_vehicles()
-    vehicles.sort(
-        key=lambda vehicle: vehicle["arrival_date_raw"] or datetime.min,
-        reverse=True,
-    )
+    vehicles.sort(key=lambda vehicle: vehicle["arrival_date_raw"] or datetime.min, reverse=True)
     return vehicles[:limit]
 ```
 
 Restituisce le `limit` auto con l'ultimo aggiornamento di timeline **più recente** (le "novità").
 
-- **187** carica **tutti** i veicoli normalizzati.
-- **188–191** li ordina per `arrival_date_raw` (la data grezza dell'ultimo evento):
-  - `key=lambda vehicle: vehicle["arrival_date_raw"] or datetime.min` = usa quella data come chiave;
-    se è `None` (nessun evento) usa `datetime.min` (la data più antica possibile), così le auto senza
+- **139** carica **tutti** i veicoli normalizzati.
+- **140** li ordina per `arrival_date_raw` (la data grezza dell'ultimo evento):
+  - se è `None` (nessun evento) usa `datetime.min` (la data più antica possibile), così le auto senza
     timeline finiscono **in fondo** invece di causare un errore nel confronto.
-  - `reverse=True` = ordine **decrescente** (dalla più recente alla più vecchia).
-- **192** restituisce solo i primi `limit` (default 3).
+  - `reverse=True` = ordine **decrescente** (dalla più recente).
+- **141** restituisce solo i primi `limit` (default 3).
 
 ---
 
-## `build_filter_options(vehicles)` — opzioni per i menu a tendina (righe 195–200)
+## `build_filter_options(vehicles)` — opzioni per i menu a tendina (righe 144–150)
 
 ```python
-def build_filter_options(vehicles: list[dict[str, Any]]) -> dict[str, list[str]]:
+def build_filter_options(vehicles):
+    # Valori unici (senza duplicati) per riempire i menu a tendina dei filtri.
     return {
         "statuses": sorted({vehicle["status"] for vehicle in vehicles}),
         "brands": sorted({vehicle["brand"] for vehicle in vehicles}),
@@ -582,77 +410,67 @@ def build_filter_options(vehicles: list[dict[str, Any]]) -> dict[str, list[str]]
     }
 ```
 
-Data una lista di veicoli **già normalizzati**, ricava i valori **unici** per popolare i filtri
-(dropdown) nelle pagine catalogo/gestione.
+Data una lista di veicoli **già normalizzati**, ricava i valori **unici** per popolare i filtri.
 
-- **197** `statuses`: insieme di tutti gli `status` distinti, ordinati. Le graffe `{...}` qui creano
-  un **set** (set comprehension): elimina automaticamente i duplicati. `sorted(...)` lo ordina
-  alfabeticamente restituendo una lista.
-- **198** `brands`: stessa cosa per le marche.
-- **199** `trims`: stessa cosa per gli allestimenti, ma con un **filtro**: `if vehicle["trim"] != "N/D"`
-  esclude gli allestimenti sconosciuti (non ha senso mettere "N/D" tra le opzioni selezionabili).
+- **147** `statuses`: insieme degli `status` distinti, ordinati. Le graffe `{...}` creano un **set**
+  (set comprehension): elimina i duplicati. `sorted(...)` lo ordina e restituisce una lista.
+- **148** `brands`: stessa cosa per le marche.
+- **149** `trims`: stessa cosa per gli allestimenti, ma escludendo `"N/D"` (non ha senso metterlo tra
+  le opzioni).
 
 ---
 
-## `build_calendar_events(vehicles)` — eventi per il calendario (righe 203–228)
+## `build_calendar_events(vehicles)` — eventi per il calendario (righe 153–180)
 
 ```python
-def build_calendar_events(vehicles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_calendar_events(vehicles):
+    # Trasforma i veicoli in eventi per il calendario del frontend.
+    colori_stato = {
+        "Pronta per la consegna": "#5ee0a0",
+        "Arrivato in Concessionaria": "#4f8cff",
+        "In Viaggio": "#ffb347",
+        "Ordinato in Fabbrica": "#8e9cff",
+    }
     events = []
     for vehicle in vehicles:
         if not vehicle["arrival_date_iso"]:
             continue
-```
-
-Trasforma i veicoli in **eventi per FullCalendar** (la libreria calendario JavaScript del frontend).
-
-- **204** lista vuota da riempire.
-- **205** cicla su ogni veicolo.
-- **206–207** se il veicolo **non ha** una data ISO valida (`arrival_date_iso` è `None`/vuoto),
-  lo **salta** (`continue`): senza data non può stare sul calendario.
-
-```python
         events.append(
             {
                 "title": f'{vehicle["brand"]} {vehicle["modello"]}',
                 "start": vehicle["arrival_date_iso"],
-                "dateLabel": vehicle["arrival_date"],
                 "vehicleId": vehicle["id"],
-```
-- **208–213** costruisce l'evento:
-  - `title`: testo mostrato, es. `"Renault Clio"` (f-string che unisce marca e modello).
-  - `start`: data di inizio evento in formato ISO (quella che FullCalendar richiede).
-  - `dateLabel`: la data "bella" `gg/mm/aaaa` da mostrare nei tooltip.
-  - `vehicleId`: l'id, per poter linkare l'evento alla pagina di dettaglio.
-
-```python
-                "backgroundColor": {
-                    "Pronta per la consegna": "#5ee0a0",
-                    "Arrivato in Concessionaria": "#4f8cff",
-                    "In Viaggio": "#ffb347",
-                    "Ordinato in Fabbrica": "#8e9cff",
-                }.get(vehicle["status"], "#9eb2cf"),
+                "backgroundColor": colori_stato.get(vehicle["status"], "#9eb2cf"),
                 "borderColor": "#ffffff22",
-```
-- **214–220** `backgroundColor`: colore dell'evento in base allo **stato**. È un dizionario
-  "stato → colore" su cui si chiama `.get(vehicle["status"], "#9eb2cf")`: prende il colore giusto,
-  oppure un grigio-azzurro di default `#9eb2cf` se lo stato non è tra quelli elencati (es. "In Preparazione").
-- **220** `borderColor`: `#ffffff22` = bianco con trasparenza (gli ultimi due caratteri `22` sono
-  il canale alpha in esadecimale → bordo tenue).
-
-```python
                 "extendedProps": {
                     "status": vehicle["status"],
                     "vin": vehicle["vin"],
                     "trim": vehicle["trim"],
+                    "dateLabel": vehicle["arrival_date"],
                 },
             }
         )
     return events
 ```
-- **221–225** `extendedProps`: dati "extra" che FullCalendar conserva sull'evento e che il JS può
-  leggere (es. per mostrare stato, VIN e allestimento in un popup al click).
-- **228** restituisce la lista completa di eventi.
+
+Trasforma i veicoli in **eventi per FullCalendar** (la libreria calendario JavaScript del frontend).
+
+- **155–160** `colori_stato`: una mappa "stato → colore", tirata fuori dal ciclo così è scritta una
+  volta sola.
+- **161** lista vuota da riempire.
+- **162–164** cicla su ogni veicolo; se **non ha** una data ISO valida, lo **salta** (`continue`):
+  senza data non può stare sul calendario.
+- **165–178** costruisce l'evento:
+  - `title`: testo mostrato, es. `"Renault Clio"`.
+  - `start`: data di inizio in formato ISO (quella che FullCalendar richiede).
+  - `vehicleId`: l'id, per linkare l'evento alla scheda.
+  - `backgroundColor`: colore in base allo **stato** (`colori_stato.get(..., "#9eb2cf")`: colore
+    giusto o un grigio-azzurro di default).
+  - `borderColor`: `#ffffff22` = bianco con trasparenza (`22` = canale alpha esadecimale).
+  - `extendedProps`: dati "extra" che FullCalendar conserva e che il JS legge (`status`, `vin`,
+    `trim`, `dateLabel`). **Nota:** `dateLabel` sta qui dentro, così in `app.js` l'accesso
+    `arg.event.extendedProps.dateLabel` è letteralmente corretto.
+- **180** restituisce la lista completa di eventi.
 
 ---
 
@@ -661,23 +479,27 @@ Trasforma i veicoli in **eventi per FullCalendar** (la libreria calendario JavaS
 | Funzione del repository            | Usata in `app.py` per...                                   |
 |------------------------------------|------------------------------------------------------------|
 | `dashboard_summary`                | numeri delle card in home (`/`)                            |
+| `seller_leaderboard`               | classifica venditori in home (`/`)                         |
 | `featured_vehicles`                | auto in evidenza in home (`/`)                             |
 | `list_vehicles`                    | gestione auto, catalogo, veicoli correlati                 |
 | `build_filter_options`             | popolare i dropdown dei filtri                             |
 | `build_calendar_events`            | eventi del calendario in "Gestione auto"                   |
 | `get_vehicle_by_id`                | pagina di dettaglio auto (vista)                           |
-| `get_vehicle_document_by_id`       | leggere il documento grezzo prima di un update             |
+| `get_vehicle_document_by_id`       | leggere il documento grezzo per il form di modifica        |
 | `upsert_vehicle_document`          | salvare/creare un'auto (POST)                              |
 | `delete_vehicle_document`          | cancellare un'auto                                         |
-| `format_date`                      | esposta ai template come helper                            |
+
+> `collection` è importata anche da `seed_mongo.py` e `datagenerator.py` per popolare il database.
 
 ## Concetti chiave da ricordare
 
 1. **Traduzione italiano ⇄ inglese**: il DB parla italiano, i template parlano inglese;
-   `normalize_vehicle` è il ponte.
+   `normalize_vehicle` è il ponte, e calcola anche i campi che nel DB non esistono.
 2. **Due letture, un motivo**: versione normalizzata (per mostrare) vs grezza (per modificare).
 3. **`.get(chiave, default)` ovunque**: rende il codice a prova di campi mancanti.
-4. **Id o VIN**: quasi tutte le funzioni "per id" accettano sia l'ObjectId sia il numero di telaio.
-5. **Connessione unica**: `@lru_cache` su `get_collection()` evita di riaprire la connessione.
-6. **Aggregation vs Python**: i conteggi (`dashboard_summary`) sfruttano `$group` lato DB;
-   ordinamenti fini e filtri di presentazione avvengono lato Python.
+4. **Id o VIN**: le funzioni "per id" accettano sia l'ObjectId sia il numero di telaio.
+5. **Una connessione sola**: `collection` è creata una volta a livello di modulo, e la riusano anche
+   gli script di popolamento.
+6. **Le operazioni MongoDB**: `find` (list_vehicles), `find_one` (get_..._by_id),
+   `insert_one`/`update_one` (upsert), `delete_one` (delete), `aggregate` con `$group`+`$sum`
+   (dashboard_summary, seller_leaderboard).

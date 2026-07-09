@@ -42,15 +42,9 @@ def normalize_vehicle(document):
         "status": document.get("stato_attuale", ""),
         "seller": document.get("venditore", ""),
         "customer_name": customer.get("nome", ""),
-        "customer_email": customer.get("email", ""),
-        "customer_phone": customer.get("numero_telefono", ""),
         "trim": config.get("allestimento", "N/D"),
         "motorizzazione": config.get("motorizzazione", "N/D"),
         "color": config.get("colore_esterno", "N/D"),
-        "included_packages": config.get("pacchetti_inclusi", []),
-        "extra_packages": config.get("pacchetti_aggiuntivi", []),
-        "battery_kwh": config.get("capacita_batteria_kw"),
-        "charging_cable": config.get("cavo_ricarica_incluso"),
         "timeline": [
             {
                 "status": step.get("stato", ""),
@@ -63,7 +57,6 @@ def normalize_vehicle(document):
         "arrival_date": format_date(last_date),
         "arrival_date_iso": last_date.date().isoformat() if isinstance(last_date, datetime) else None,
         "arrival_date_raw": last_date,
-        "public": document.get("stato_attuale") != "In Preparazione",
     }
 
 
@@ -127,6 +120,19 @@ def dashboard_summary():
     }
 
 
+def seller_leaderboard():
+    # Classifica venditori: raggruppa per venditore, conta le auto ($group +
+    # $sum) e ordina dal piu' attivo ($sort).
+    pipeline = [
+        {"$group": {"_id": "$venditore", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    return [
+        {"seller": row["_id"], "count": row["count"]}
+        for row in collection.aggregate(pipeline)
+    ]
+
+
 def featured_vehicles(limit=3):
     # Le auto con l'ultimo aggiornamento piu' recente: prendo tutti i veicoli
     # e li ordino per data dell'ultimo evento, tenendo solo i primi.
@@ -160,7 +166,6 @@ def build_calendar_events(vehicles):
             {
                 "title": f'{vehicle["brand"]} {vehicle["modello"]}',
                 "start": vehicle["arrival_date_iso"],
-                "dateLabel": vehicle["arrival_date"],
                 "vehicleId": vehicle["id"],
                 "backgroundColor": colori_stato.get(vehicle["status"], "#9eb2cf"),
                 "borderColor": "#ffffff22",
@@ -168,6 +173,7 @@ def build_calendar_events(vehicles):
                     "status": vehicle["status"],
                     "vin": vehicle["vin"],
                     "trim": vehicle["trim"],
+                    "dateLabel": vehicle["arrival_date"],
                 },
             }
         )

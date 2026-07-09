@@ -8,20 +8,15 @@ from mongo_repository import (
 	dashboard_summary,
 	delete_vehicle_document,
 	featured_vehicles,
-	format_date,
 	get_vehicle_document_by_id,
 	get_vehicle_by_id,
 	list_vehicles,
+	seller_leaderboard,
 	upsert_vehicle_document,
 )
 
 
 app = Flask(__name__)
-
-
-@app.context_processor
-def inject_helpers():
-	return {"format_date": format_date}
 
 
 def _split_multiline(value):
@@ -59,7 +54,7 @@ def _build_vehicle_document(form, existing_document=None):
 		timeline.append(
 			{
 				"stato": status,
-				"data": datetime.utcnow(),
+				"data": datetime.now(),
 				"operatore": timeline_operator,
 			}
 		)
@@ -67,7 +62,7 @@ def _build_vehicle_document(form, existing_document=None):
 		timeline.append(
 			{
 				"stato": status,
-				"data": datetime.utcnow(),
+				"data": datetime.now(),
 				"operatore": timeline_operator,
 			}
 		)
@@ -89,16 +84,18 @@ def _build_vehicle_document(form, existing_document=None):
 	}
 
 
-def _vehicle_form_defaults(vehicle):
-	vehicle = vehicle or {}
-	configuration = vehicle.get("configurazione") or {}
-	customer = vehicle.get("assegnato_a_cliente") or {}
+def _vehicle_form_defaults(document):
+	# Riceve il documento GREZZO (chiavi italiane), non quello normalizzato,
+	# cosi' il form di modifica mostra i valori realmente salvati.
+	document = document or {}
+	configuration = document.get("configurazione") or {}
+	customer = document.get("assegnato_a_cliente") or {}
 	return {
-		"vin_telaio": vehicle.get("vin", ""),
-		"marca": vehicle.get("brand", ""),
-		"modello": vehicle.get("modello", ""),
-		"stato_attuale": vehicle.get("status", ""),
-		"venditore": vehicle.get("seller", ""),
+		"vin_telaio": document.get("vin_telaio", ""),
+		"marca": document.get("marca", ""),
+		"modello": document.get("modello", ""),
+		"stato_attuale": document.get("stato_attuale", ""),
+		"venditore": document.get("venditore", ""),
 		"id_cliente": customer.get("id_cliente", ""),
 		"nome_cliente": customer.get("nome", ""),
 		"email_cliente": customer.get("email", ""),
@@ -112,7 +109,7 @@ def _vehicle_form_defaults(vehicle):
 		"cavo_ricarica_incluso": configuration.get("cavo_ricarica_incluso", False),
 		"timeline_stato": "",
 		"timeline_data": "",
-		"timeline_operatore": vehicle.get("seller", ""),
+		"timeline_operatore": document.get("venditore", ""),
 	}
 
 
@@ -120,10 +117,12 @@ def _vehicle_form_defaults(vehicle):
 def home():
 	summary = dashboard_summary()
 	featured = featured_vehicles(limit=3)
+	leaderboard = seller_leaderboard()
 	return render_template(
 		"home.html",
 		title="Home",
 		featured=featured,
+		leaderboard=leaderboard,
 		fleet_count=summary["total"],
 		ready_count=summary["ready"],
 		transit_count=summary["in_transit"],
@@ -166,6 +165,7 @@ def auto_dettaglio(car_id):
 	if car is None:
 		abort(404)
 
+	document = get_vehicle_document_by_id(car_id)
 	related = list_vehicles(
 		query={"marca": car["brand"]},
 		limit=3,
@@ -176,7 +176,7 @@ def auto_dettaglio(car_id):
 		title=f"{car['brand']} {car['modello']}",
 		car=car,
 		related=related,
-		vehicle_form=_vehicle_form_defaults(car),
+		vehicle_form=_vehicle_form_defaults(document),
 		is_new=False,
 	)
 
@@ -210,19 +210,9 @@ def auto_nuova():
 			"brand": "",
 			"modello": "",
 			"status": "",
-			"vin": "",
 			"timeline": [],
 			"timeline_count": 0,
 			"arrival_date": "N/D",
-			"motorizzazione": "",
-			"trim": "",
-			"color": "",
-			"seller": "",
-			"customer_name": "",
-			"customer_email": "",
-			"customer_phone": "",
-			"battery_kwh": "",
-			"charging_cable": False,
 		},
 		related=[],
 		vehicle_form=_vehicle_form_defaults({}),

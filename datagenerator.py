@@ -1,16 +1,13 @@
 import random
 from faker import Faker
 from datetime import datetime, timedelta
-from pymongo import MongoClient
+
+# Usa la stessa connessione dell'app (rispetta le variabili d'ambiente
+# MONGO_URI / MONGO_DB_NAME / MONGO_COLLECTION_NAME).
+from mongo_repository import collection as veicoli_collection
 
 # Inizializza Faker in italiano
 fake = Faker('it_IT')
-
-# 1. STRINGA DI CONNESSIONE (Sostituiscila con la tua di MongoDB Atlas)
-MONGO_URI = "mongodb://localhost:27017/"
-client = MongoClient(MONGO_URI)
-db = client['db_veicoli']
-veicoli_collection = db['vehicles']
 
 # 2. DIZIONARIO ESCLUSIVO RENAULT
 modelli_renault = [

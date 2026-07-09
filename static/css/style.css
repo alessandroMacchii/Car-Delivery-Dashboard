@@ -1310,3 +1310,66 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* ================================================================
+   LEADERBOARD VENDITORI
+   ================================================================ */
+.leaderboard {
+  padding: 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.leaderboard__row {
+  display: grid;
+  grid-template-columns: 28px minmax(120px, 1.2fr) 3fr auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.leaderboard__rank {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+.leaderboard__name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaderboard__bar {
+  height: 10px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.leaderboard__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--grad-brand);
+}
+
+.leaderboard__count {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 2ch;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  .leaderboard__row {
+    grid-template-columns: 24px 1fr auto;
+  }
+  .leaderboard__bar {
+    display: none;
+  }
+}
